@@ -1,0 +1,168 @@
+import { useState, useEffect, useRef } from "react";
+import { motion } from "framer-motion";
+
+const gameWidth = 400;
+const gameHeight = 500;
+const squareSize = 40;
+const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+const gameDuration = 15;
+const totalLevels = 5;
+const speed = 2.5;
+const minScoreToProceed = 200;
+
+export default function SpeedySquares() {
+  const [squares, setSquares] = useState([]);
+  const [score, setScore] = useState(0);
+  const [gameActive, setGameActive] = useState(false);
+  const [timeLeft, setTimeLeft] = useState(gameDuration);
+  const [level, setLevel] = useState(1);
+  const [waitingForNextLevel, setWaitingForNextLevel] = useState(false);
+  const [levelCompleted, setLevelCompleted] = useState(false);
+  const [levelAlphabet, setLevelAlphabet] = useState("");
+  const correctLetterClicked = useRef(false);
+
+  useEffect(() => {
+    if (gameActive && !waitingForNextLevel) {
+      const timer = setInterval(() => {
+        setTimeLeft((prev) => {
+          if (prev <= 0) { // Changed to <= 0
+            if (score >= minScoreToProceed) {
+              setWaitingForNextLevel(true);
+              setLevelCompleted(true);
+            } else {
+              setWaitingForNextLevel(true);
+              setLevelCompleted(false);
+            }
+            setSquares([]);
+            correctLetterClicked.current = false;
+            return gameDuration;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+      return () => clearInterval(timer);
+    }
+  }, [gameActive, level, waitingForNextLevel, score]);
+
+  useEffect(() => {
+    if (gameActive && !waitingForNextLevel) {
+      const interval = setInterval(() => {
+        setSquares((prev) => [
+          ...prev,
+          {
+            x: -squareSize,
+            y: 100 + Math.random() * 300,
+            letter: levelAlphabet[Math.floor(Math.random() * levelAlphabet.length)],
+            clicked: false,
+            id: Math.random(),
+          },
+        ]);
+      }, 1000);
+      return () => clearInterval(interval);
+    }
+  }, [gameActive, level, levelAlphabet, waitingForNextLevel]);
+
+  const handleKeyPress = (event) => {
+    let letterClicked = false;
+    setSquares((prevSquares) =>
+      prevSquares.map((square) => {
+        if (square.letter === event.key.toUpperCase() && !square.clicked) {
+          setScore((prev) => prev + 10);
+          letterClicked = true;
+          return { ...square, clicked: true };
+        }
+        return square;
+      })
+    );
+
+    if (letterClicked) {
+      correctLetterClicked.current = true;
+    }
+
+    if (!letterClicked) { // Removed score check here
+      correctLetterClicked.current = false; // important
+    }
+  };
+
+  useEffect(() => {
+    window.addEventListener("keydown", handleKeyPress);
+    return () => window.removeEventListener("keydown", handleKeyPress);
+  }, [squares]);
+
+  useEffect(() => {
+    if (waitingForNextLevel) {
+      const nextLevelHandler = (event) => {
+        if (event.key === "Enter" && levelCompleted) {
+          setLevel((prev) => prev + 1);
+          setSquares([]);
+          setWaitingForNextLevel(false);
+          setTimeLeft(gameDuration);
+          setLevelAlphabet(generateUniqueAlphabet());
+          setScore(0);
+          correctLetterClicked.current = false;
+        } else if (event.key === "Enter" && !levelCompleted) {
+          setSquares([]);
+          setWaitingForNextLevel(false);
+          setTimeLeft(gameDuration);
+          setScore(0);
+          correctLetterClicked.current = false;
+        }
+      };
+      window.addEventListener("keydown", nextLevelHandler);
+      return () => window.removeEventListener("keydown", nextLevelHandler);
+    }
+  }, [waitingForNextLevel, levelCompleted]);
+
+  const generateUniqueAlphabet = () => {
+    let shuffled = alphabet.split("").sort(() => 0.5 - Math.random());
+    return shuffled.slice(0, 10).join("");
+  };
+
+  const startGame = () => {
+    setGameActive(true);
+    setScore(0);
+    setSquares([]);
+    setTimeLeft(gameDuration);
+    setLevel(1);
+    setWaitingForNextLevel(false);
+    setLevelCompleted(false);
+    setLevelAlphabet(generateUniqueAlphabet());
+    correctLetterClicked.current = false;
+  };
+
+  return (
+    <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-r from-indigo-800 via-pink-700 to-yellow-500 text-white relative p-8">
+      <h1 className="text-4xl font-extrabold mb-6 text-shadow-lg">Speedy Squares</h1>
+      <p className="text-lg mb-2 bg-white text-black px-4 py-2 rounded-lg shadow-md">Score: {score}</p>
+      <p className="text-lg mb-2 bg-white text-black px-4 py-2 rounded-lg shadow-md">Time Left: {timeLeft}s</p>
+      <p className="text-lg mb-2 bg-white text-black px-4 py-2 rounded-lg shadow-md">Level: {level} / {totalLevels}</p>
+      {waitingForNextLevel && (
+        <p className="text-lg text-yellow-400 font-bold animate-pulse">
+          {levelCompleted ? "Press ENTER to proceed to the next level!" : "Press ENTER to restart the level!"}
+        </p>
+      )}
+      <div className="relative w-[400px] h-[500px] border border-gray-500 overflow-hidden shadow-2xl rounded-lg bg-gradient-to-br from-gray-900 via-gray-700 to-gray-500">
+        {squares.map((square) => (
+          <motion.div
+            key={square.id}
+            className={`absolute w-10 h-10 flex items-center justify-center text-black font-bold rounded-lg ${square.clicked ? "bg-green-500" : "bg-white"}`}
+            style={{ top: square.y, left: square.x }}
+            animate={{ x: [square.x, gameWidth + squareSize] }}
+            transition={{ duration: 5 - speed, ease: "linear" }}
+            onAnimationComplete={() => {
+              setSquares((prev) => prev.filter((s) => s.id !== square.id));
+            }}
+          >
+            {square.letter}
+          </motion.div>
+        ))}
+      </div>
+      {!gameActive && (
+        <button className="mt-6 px-8 py-3 bg-gradient-to-r from-green-400 to-blue-600 text-white text-lg font-bold rounded-xl shadow-lg transform hover:scale-105 transition-all" onClick={startGame}>
+          Start Game
+        </button>
+      )}
+    </div>
+  );
+}
+
